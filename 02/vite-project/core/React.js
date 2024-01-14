@@ -1,18 +1,61 @@
-const render = (el, container) => {
-  const dom =
-    el.type === 'TEXT_NODE' ? document.createTextNode('') : document.createElement(el.type)
+let nextWork = null
 
-  Object.keys(el.props).forEach(key => {
+const render = (el, container) => {
+  const work = {
+    ...el,
+    parent: {
+      dom: container
+    }
+  }
+  nextWork = work
+}
+
+requestIdleCallback(callback)
+function callback(IdleDeadline) {
+  let deadline = IdleDeadline.timeRemaining()
+  while (deadline > 0) {
+    // do something
+    nextWork = runUnitOfWork(nextWork)
+    deadline = IdleDeadline.timeRemaining()
+  }
+  requestIdleCallback(callback)
+}
+
+function runUnitOfWork(work) {
+  if (!work) return
+
+  const dom = (work.dom =
+    work.type === 'TEXT_NODE' ? document.createTextNode('') : document.createElement(work.type))
+
+  Object.keys(work.props).forEach(key => {
     if (key !== 'children') {
-      dom[key] = el.props[key]
+      dom[key] = work.props[key]
     }
   })
 
-  el.props.children.forEach(child => {
-    render(child, dom)
+  let prevChild = null
+  work.props.children.forEach((child, index) => {
+    if (!index) {
+      work.child = child
+    } else {
+      child.siblings = prevChild
+    }
+    child.parent = work
+    prevChild = child
   })
 
-  container.appendChild(dom)
+  // container.appendChild(dom)
+  work.parent.dom.appendChild(work.dom)
+
+  if (work.child) {
+    return work.child
+  }
+
+  if (work.siblings) {
+    return work.siblings
+  }
+
+  return work.parent?.siblings
 }
 
 const createTextNode = text => {
