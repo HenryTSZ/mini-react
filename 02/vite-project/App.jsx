@@ -1,9 +1,12 @@
 import React from './core/React.js'
 
 // const App = React.createElement('div', { id: 'app' }, 'hi', ' ', 'mini', '-', 'react')
+const Counter = count => <div>count: {count}</div>
+
 const App = (
   <div id="app">
-    hi mini-react <div>test</div>
+    hi mini-react
+    <Counter count={10}></Counter>
   </div>
 )
 // const App = () => <div id="app">hi mini-react</div>

@@ -38,6 +38,7 @@ function submitWork(work) {
   if (!work) {
     return
   }
+  console.log('🚀 ~ submitWork ~ work:', work)
   work.parent.dom.appendChild(work.dom)
   submitWork(work.child)
   submitWork(work.sibling)
@@ -47,6 +48,7 @@ const createDom = type =>
   type === 'TEXT_NODE' ? document.createTextNode('') : document.createElement(type)
 
 const updateProps = (work, dom) => {
+  console.log('🚀 ~ updateProps ~ work:', work)
   Object.keys(work.props).forEach(key => {
     if (key !== 'children') {
       dom[key] = work.props[key]
@@ -55,6 +57,7 @@ const updateProps = (work, dom) => {
 }
 
 const initChildren = work => {
+  console.log('🚀 ~ initChildren ~ work:', work)
   let prevChild = null
   work.props.children.forEach((child, index) => {
     const newWork = {
@@ -74,13 +77,21 @@ const initChildren = work => {
 }
 
 function runUnitOfWork(work) {
+  console.log('🚀 ~ runUnitOfWork ~ work:', work)
+  if (typeof work.type === 'function') {
+    const realWork = work.type(work.props)
+    for (const key in realWork) {
+      if (Object.hasOwnProperty.call(realWork, key)) {
+        console.log('🚀 ~ runUnitOfWork ~ key:', key, realWork[key])
+        work[key] = realWork[key]
+      }
+    }
+  }
   const dom = (work.dom = createDom(work.type))
 
   updateProps(work, dom)
 
   initChildren(work)
-
-  work.parent.dom.appendChild(work.dom)
 
   if (work.child) {
     return work.child
@@ -108,7 +119,17 @@ const createElement = (type, props, ...children) => {
     type,
     props: {
       ...props,
-      children: children.map(child => (typeof child === 'string' ? createTextNode(child) : child))
+      children: children.map(child => {
+        if (typeof child === 'string') {
+          return createTextNode(child)
+        } else if (typeof child.type === 'function') {
+          const extracted = child.type(child.props)
+          console.log('🚀 ~ createElement ~ extracted:', extracted)
+          return extracted
+        } else {
+          return child
+        }
+      })
     }
   }
 }
