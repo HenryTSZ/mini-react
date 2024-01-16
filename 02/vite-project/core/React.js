@@ -1,4 +1,5 @@
 let nextWork = null
+let rootDom = null
 
 const render = (el, container) => {
   const work = {
@@ -8,6 +9,7 @@ const render = (el, container) => {
     }
   }
   nextWork = work
+  rootDom = work
 }
 
 requestIdleCallback(callback)
@@ -19,12 +21,30 @@ function callback(IdleDeadline) {
     nextWork = runUnitOfWork(nextWork)
     deadline = IdleDeadline.timeRemaining()
   }
+
+  if (!nextWork && rootDom) {
+    submit()
+    rootDom = null
+  }
+
   requestIdleCallback(callback)
 }
 
-const createDom = type => {
-  type === 'TEXT_NODE' ? document.createTextNode('') : document.createElement(type)
+function submit() {
+  submitWork(rootDom)
 }
+
+function submitWork(work) {
+  if (!work) {
+    return
+  }
+  work.parent.dom.appendChild(work.dom)
+  submitWork(work.child)
+  submitWork(work.sibling)
+}
+
+const createDom = type =>
+  type === 'TEXT_NODE' ? document.createTextNode('') : document.createElement(type)
 
 const updateProps = (work, dom) => {
   Object.keys(work.props).forEach(key => {
