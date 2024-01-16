@@ -11,9 +11,10 @@ const render = (el, container) => {
 }
 
 requestIdleCallback(callback)
+
 function callback(IdleDeadline) {
   let deadline = IdleDeadline.timeRemaining()
-  while (deadline > 0) {
+  while (deadline > 0 && nextWork) {
     // do something
     nextWork = runUnitOfWork(nextWork)
     deadline = IdleDeadline.timeRemaining()
@@ -21,41 +22,55 @@ function callback(IdleDeadline) {
   requestIdleCallback(callback)
 }
 
-function runUnitOfWork(work) {
-  if (!work) return
+const createDom = type => {
+  type === 'TEXT_NODE' ? document.createTextNode('') : document.createElement(type)
+}
 
-  const dom = (work.dom =
-    work.type === 'TEXT_NODE' ? document.createTextNode('') : document.createElement(work.type))
-
+const updateProps = (work, dom) => {
   Object.keys(work.props).forEach(key => {
     if (key !== 'children') {
       dom[key] = work.props[key]
     }
   })
+}
 
+const initChildren = work => {
   let prevChild = null
   work.props.children.forEach((child, index) => {
-    if (!index) {
-      work.child = child
-    } else {
-      child.siblings = prevChild
+    const newWork = {
+      type: child.type,
+      props: child.props,
+      parent: work,
+      child: null,
+      sibling: null
     }
-    child.parent = work
-    prevChild = child
+    if (!index) {
+      work.child = newWork
+    } else {
+      prevChild.sibling = newWork
+    }
+    prevChild = newWork
   })
+}
 
-  // container.appendChild(dom)
+function runUnitOfWork(work) {
+  const dom = (work.dom = createDom(work.type))
+
+  updateProps(work, dom)
+
+  initChildren(work)
+
   work.parent.dom.appendChild(work.dom)
 
   if (work.child) {
     return work.child
   }
 
-  if (work.siblings) {
-    return work.siblings
+  if (work.sibling) {
+    return work.sibling
   }
 
-  return work.parent?.siblings
+  return work.parent?.sibling
 }
 
 const createTextNode = text => {
