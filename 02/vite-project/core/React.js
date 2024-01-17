@@ -78,15 +78,15 @@ const initChildren = work => {
 
 function runUnitOfWork(work) {
   console.log('🚀 ~ runUnitOfWork ~ work:', work)
-  if (typeof work.type === 'function') {
-    const realWork = work.type(work.props)
-    for (const key in realWork) {
-      if (Object.hasOwnProperty.call(realWork, key)) {
-        console.log('🚀 ~ runUnitOfWork ~ key:', key, realWork[key])
-        work[key] = realWork[key]
-      }
-    }
-  }
+  // if (typeof work.type === 'function') {
+  //   const realWork = work.type(work.props)
+  //   for (const key in realWork) {
+  //     if (Object.hasOwnProperty.call(realWork, key)) {
+  //       console.log('🚀 ~ runUnitOfWork ~ key:', key, realWork[key])
+  //       work[key] = realWork[key]
+  //     }
+  //   }
+  // }
   const dom = (work.dom = createDom(work.type))
 
   updateProps(work, dom)
@@ -120,8 +120,10 @@ const createElement = (type, props, ...children) => {
     props: {
       ...props,
       children: children.map(child => {
-        if (typeof child === 'string') {
+        if (typeof child === 'string' || typeof child === 'number') {
           return createTextNode(child)
+          // } else if (typeof child === 'object') {
+          //   return createTextNode(JSON.stringify(child))
         } else if (typeof child.type === 'function') {
           const extracted = child.type(child.props)
           console.log('🚀 ~ createElement ~ extracted:', extracted)
