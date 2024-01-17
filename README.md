@@ -12,60 +12,97 @@
 
 ## [06. 实现 function component](https://github.com/HenryTSZ/mini-react/tree/d30278ce013910989fe0cc3b964264ec3d7081df)
 
-## 06-1. 实现 function component 后续
+## [06-1. 实现 function component 后续](https://github.com/HenryTSZ/mini-react/tree/12420c93998cd1d9fe4ca54cb855b8f30d10e9c7)
 
-上一小节有个致命的问题啊
+## 07. 实现事件绑定
+
+上一小节又忘了一个，还没有把 App 变成 function component，总是丢三落四的
 
 ```js
-const Counter = count => <div>count: {count}</div>
+ReactDOM.createRoot(document.querySelector('#root')).render(<App></App>)
 ```
 
-这个 count 其实是 props: { count: 10 }
+果然又报错了：
 
-所以拿到的一直是一个对象，而不是一个数字
+> Uncaught DOMException: Failed to execute 'createElement' on 'Document': The tag name provided ('[object Object]') is not a valid name.
 
-ps: 那对象这种情况其实也是需要处理的，看看后续有处理逻辑没
+是这里报错的：
 
 ```js
-const Counter = ({ count }) => <div>count: {count}</div>
+const createDom = type =>
+  type === 'TEXT_NODE' ? document.createTextNode('') : document.createElement(type)
 ```
 
-这样拿到的就是一个数字了
+说 type 是一个对象
 
-![](./img/016.png)
+打断点看一下确实是一个对象，好像就是 App 的
 
-就可以在 createElement 中处理了
+应该还是 createElement 这里没有处理
+
+可以看到这里的 type 就是一个对象，而我们直接把 type 返回了，导致出问题了
+
+而且这个 type 就是一个 vdom 了，那直接返回 type 就可以了
 
 ```js
-if (typeof child === 'string' || typeof child === 'number') {
-  return createTextNode(child)
+const createElement = (type, props, ...children) => {
+  if (typeof type === 'object') {
+    return type
+  }
 }
 ```
 
-这样就渲染出来了
+页面展示正常了
 
-![](./img/017.png)
-
-再加一个：
+然后就开始实现事件绑定了
 
 ```js
-const App = (
-  <div id="app">
-    hi mini-react
-    <Counter count={10}></Counter>
-    <Counter count={20}></Counter>
-  </div>
-)
+const Counter = ({ count }) => {
+  const add = () => {
+    console.log(111)
+  }
+
+  return (
+    <div>
+      count: {count} <button onClick={add}>add</button>
+    </div>
+  )
+}
 ```
 
-也没有问题
+现在点击是没有反应的
 
-![](./img/018.png)
+在 updateProps 中可以看到 onClick 这个方法，那我们就给绑定一下就可以了
 
-那我们在 runUnitOfWork 中是不是就不需要处理 function 了呢？
+```js
+const updateProps = (work, dom) => {
+  console.log('🚀 ~ updateProps ~ work:', work)
+  Object.keys(work.props).forEach(key => {
+    if (key !== 'children') {
+      if (key.startsWith('on')) {
+        const eventType = key.slice(2).toLowerCase()
+        dom.addEventListener(eventType, work.props[key])
+      } else {
+        dom[key] = work.props[key]
+      }
+    }
+  })
+}
+```
 
-看 log, work.type 是没有 function 了
+这样点击就能正常触发了
 
-去掉看看
+同时也支持传参：
 
-也没有问题
+```js
+const Counter = ({ count }) => {
+  const add = count => {
+    console.log(111, count)
+  }
+
+  return (
+    <div>
+      count: {count} <button onClick={() => add(count)}>add</button>
+    </div>
+  )
+}
+```

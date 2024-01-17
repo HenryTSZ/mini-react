@@ -1,13 +1,22 @@
 import React from './core/React.js'
 
 // const App = React.createElement('div', { id: 'app' }, 'hi', ' ', 'mini', '-', 'react')
-const Counter = ({ count }) => <div>count: {count}</div>
+const Counter = ({ count }) => {
+  const add = count => {
+    console.log(111, count)
+  }
+
+  return (
+    <div>
+      count: {count} <button onClick={() => add(count)}>add</button>
+    </div>
+  )
+}
 
 const App = (
   <div id="app">
     hi mini-react
     <Counter count={10}></Counter>
-    <Counter count={20}></Counter>
   </div>
 )
 

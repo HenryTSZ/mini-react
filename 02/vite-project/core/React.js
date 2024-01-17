@@ -51,7 +51,12 @@ const updateProps = (work, dom) => {
   console.log('🚀 ~ updateProps ~ work:', work)
   Object.keys(work.props).forEach(key => {
     if (key !== 'children') {
-      dom[key] = work.props[key]
+      if (key.startsWith('on')) {
+        const eventType = key.slice(2).toLowerCase()
+        dom.addEventListener(eventType, work.props[key])
+      } else {
+        dom[key] = work.props[key]
+      }
     }
   })
 }
@@ -115,6 +120,9 @@ const createTextNode = text => {
 }
 
 const createElement = (type, props, ...children) => {
+  if (typeof type === 'object') {
+    return type
+  }
   return {
     type,
     props: {
