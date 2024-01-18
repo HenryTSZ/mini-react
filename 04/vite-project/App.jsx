@@ -6,14 +6,19 @@ function Counter({ num }) {
 
 let count = 0
 let attribute = { id: 'app' }
+let show = true
 
 function App() {
   function handleClick() {
     count++
     attribute = { id: 'app' + count }
     console.log(count)
+    show = !show
     React.update()
   }
+
+  const Foo = () => <div>foo</div>
+  const bar = <p>bar</p>
 
   return (
     <div {...attribute}>
@@ -21,6 +26,7 @@ function App() {
       <Counter num={10}></Counter>
       <button onClick={handleClick}>add</button>
       count: {count}
+      {show ? <Foo></Foo> : bar}
     </div>
   )
 }

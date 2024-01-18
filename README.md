@@ -18,6 +18,129 @@
 
 ## [08. 实现更新 props](https://github.com/HenryTSZ/mini-react/tree/6707b972fc5d62d56059fa27eaa3e2aa4915f082)
 
-## 09. 同步视频中的代码
+## [09. 同步视频中的代码](https://github.com/HenryTSZ/mini-react/tree/d9ced68af4c5a0783d5d1af01b568644b739f254)
 
-由于自己实现的方式有问题，先切换到视频代码，后续再解决，先学习新知识
+## 10. diff-更新 children
+
+type 不一致，删除旧节点，新增新节点
+
+代码如下，点击按钮，bar 与 foo 切换显示；
+
+```js
+let show = true
+
+function App() {
+  function handleClick() {
+    count++
+    attribute = { id: 'app' + count }
+    console.log(count)
+    show = !show
+    React.update()
+  }
+
+  const foo = <div>foo</div>
+  const bar = <p>bar</p>
+
+  return (
+    <div {...attribute}>
+      hi-mini-react
+      <Counter num={10}></Counter>
+      <button onClick={handleClick}>add</button>
+      count: {count}
+      {show ? foo : bar}
+    </div>
+  )
+}
+```
+
+现在点击的效果是点击按钮后，旧节点没有删除，新节点添加了
+
+我们在 reconcileChildren 中判断 type 不同，直接就添加了，现在加一个删除逻辑就可以了
+
+由于我们是统一提交，所以删除也搞成统一吧，所以需要有一个待删除列表
+
+```js
+let deleteList = []
+```
+
+在 reconcileChildren 将其添加到待删除列表中
+
+```js
+newFiber = {
+  type: child.type,
+  props: child.props,
+  child: null,
+  parent: fiber,
+  sibling: null,
+  dom: null,
+  effectType: 'add'
+}
+
+deleteList.push(oldFiber)
+```
+
+然后在 commit 阶段删除
+
+```js
+function commitRoot() {
+  commitWork(wipRoot.child)
+  deleteDom()
+  currentRoot = wipRoot
+  wipRoot = null
+  deleteList = []
+}
+
+function deleteDom() {
+  deleteList.forEach(fiber => {
+    if (fiber.dom) {
+      fiber.dom.remove()
+    }
+  })
+}
+```
+
+运行一下，报错了：
+
+> Uncaught TypeError: Cannot read properties of undefined (reading 'dom')
+
+deleteDom 中 fiber 是 undefined
+
+这还没更新呢，咋 deleteList 就有值了呢
+
+原来我们添加的时候没有判断 oldFiber 是否有值，首次渲染肯定沒值的
+
+```js
+if (oldFiber) {
+  deleteList.push(oldFiber)
+}
+```
+
+这样就没问题了
+
+然后再试一试 fc
+
+```js
+const Foo = () => <div>foo</div>
+
+{
+  show ? <Foo></Foo> : bar
+}
+```
+
+点击按钮后，foo 没有被删除
+
+debug 发现 deleteList 添加的 oldFiber 是 fc
+
+那删除的时候就需要判断一下了
+
+```js
+function deleteDom(list = deleteList) {
+  list.forEach(fiber => {
+    if (fiber.dom) {
+      fiber.dom.remove()
+    } else {
+      deleteDom([fiber.child])
+    }
+  })
+}
+```
