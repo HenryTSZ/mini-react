@@ -20,94 +20,45 @@
 
 ## [09. 同步视频中的代码](https://github.com/HenryTSZ/mini-react/tree/d9ced68af4c5a0783d5d1af01b568644b739f254)
 
-## 10. diff-更新 children
+## [10. diff-更新 children](https://github.com/HenryTSZ/mini-react/tree/93e9c87f642f6d68bad76f7e302700bf17fdb9d4)
 
-type 不一致，删除旧节点，新增新节点
+## 11. diff-删除多余的老节点
 
-代码如下，点击按钮，bar 与 foo 切换显示；
+新的节点比旧的短，多出来的需要删除
 
-```js
-let show = true
-
-function App() {
-  function handleClick() {
-    count++
-    attribute = { id: 'app' + count }
-    console.log(count)
-    show = !show
-    React.update()
-  }
-
-  const foo = <div>foo</div>
-  const bar = <p>bar</p>
-
-  return (
-    <div {...attribute}>
-      hi-mini-react
-      <Counter num={10}></Counter>
-      <button onClick={handleClick}>add</button>
-      count: {count}
-      {show ? foo : bar}
-    </div>
-  )
-}
-```
-
-现在点击的效果是点击按钮后，旧节点没有删除，新节点添加了
-
-我们在 reconcileChildren 中判断 type 不同，直接就添加了，现在加一个删除逻辑就可以了
-
-由于我们是统一提交，所以删除也搞成统一吧，所以需要有一个待删除列表
+代码如下
 
 ```js
-let deleteList = []
+const foo = (
+  <div>
+    foo
+    <div>child</div>
+  </div>
+)
+const bar = <div>bar</div>
+
+return (
+  <div {...attribute}>
+    hi-mini-react
+    <Counter num={10}></Counter>
+    <button onClick={handleClick}>add</button>
+    count: {count}
+    {show ? foo : bar}
+  </div>
+)
 ```
 
-在 reconcileChildren 将其添加到待删除列表中
+可以看到 foo 比 bar 多一个子节点
 
-```js
-newFiber = {
-  type: child.type,
-  props: child.props,
-  child: null,
-  parent: fiber,
-  sibling: null,
-  dom: null,
-  effectType: 'add'
-}
+点击按钮看一下效果：
 
-deleteList.push(oldFiber)
-```
+![](./img/025.png)
 
-然后在 commit 阶段删除
+可以看到 bar 替换了 foo，但 foo 的 child 没有被删除
 
-```js
-function commitRoot() {
-  commitWork(wipRoot.child)
-  deleteDom()
-  currentRoot = wipRoot
-  wipRoot = null
-  deleteList = []
-}
+是因为我们新节点的 children 循环到 bar(对应的旧节点：foo) 就结束了，所以 foo 的 child 没有循环到，所以没有被删除
 
-function deleteDom() {
-  deleteList.forEach(fiber => {
-    if (fiber.dom) {
-      fiber.dom.remove()
-    }
-  })
-}
-```
-
-运行一下，报错了：
-
-> Uncaught TypeError: Cannot read properties of undefined (reading 'dom')
-
-deleteDom 中 fiber 是 undefined
-
-这还没更新呢，咋 deleteList 就有值了呢
-
-原来我们添加的时候没有判断 oldFiber 是否有值，首次渲染肯定沒值的
+我们在循环结束还需要判断 oldFiber 是否有值，有值的话还需要再删除
 
 ```js
 if (oldFiber) {
@@ -117,30 +68,25 @@ if (oldFiber) {
 
 这样就没问题了
 
-然后再试一试 fc
+那如果 foo 还有一个子节点呢：
 
 ```js
-const Foo = () => <div>foo</div>
-
-{
-  show ? <Foo></Foo> : bar
-}
+const foo = (
+  <div>
+    foo
+    <div>child</div>
+    <div>child1</div>
+  </div>
+)
 ```
 
-点击按钮后，foo 没有被删除
+和上面情况有点类似，child1 又没有删除掉
 
-debug 发现 deleteList 添加的 oldFiber 是 fc
-
-那删除的时候就需要判断一下了
+所以我们还需要再递归查找 sibling，直到没有 sibling 了
 
 ```js
-function deleteDom(list = deleteList) {
-  list.forEach(fiber => {
-    if (fiber.dom) {
-      fiber.dom.remove()
-    } else {
-      deleteDom([fiber.child])
-    }
-  })
+while (oldFiber) {
+  deleteList.push(oldFiber)
+  oldFiber = oldFiber.sibling
 }
 ```

@@ -160,6 +160,11 @@ function reconcileChildren(fiber, children) {
     }
     prevChild = newFiber
   })
+
+  while (oldFiber) {
+    deleteList.push(oldFiber)
+    oldFiber = oldFiber.sibling
+  }
 }
 
 function updateFunctionComponent(fiber) {

@@ -17,8 +17,14 @@ function App() {
     React.update()
   }
 
-  const Foo = () => <div>foo</div>
-  const bar = <p>bar</p>
+  const foo = (
+    <div>
+      foo
+      <div>child</div>
+      <div>child1</div>
+    </div>
+  )
+  const bar = <div>bar</div>
 
   return (
     <div {...attribute}>
@@ -26,7 +32,7 @@ function App() {
       <Counter num={10}></Counter>
       <button onClick={handleClick}>add</button>
       count: {count}
-      {show ? <Foo></Foo> : bar}
+      {show ? foo : bar}
     </div>
   )
 }
