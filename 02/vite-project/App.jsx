@@ -1,14 +1,18 @@
 import React from './core/React.js'
 
 // const App = React.createElement('div', { id: 'app' }, 'hi', ' ', 'mini', '-', 'react')
+let num = 0
 const Counter = ({ count }) => {
   const add = count => {
-    console.log(111, count)
+    num++
+    console.log(111, count, num)
+    React.update()
   }
 
   return (
     <div>
       count: {count} <button onClick={() => add(count)}>add</button>
+      num: {num}
     </div>
   )
 }
