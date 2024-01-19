@@ -26,82 +26,138 @@
 
 ## [12. 解决 edge case 的方式](https://github.com/HenryTSZ/mini-react/tree/abc8bb86e6b9e2a7143f31c64f1fa9d77c607855)
 
-## 13. 优化更新 减少不必要的计算
+## [13. 优化更新 减少不必要的计算](https://github.com/HenryTSZ/mini-react/tree/9e7205532a13eeb0592f07b82131998619b798ba)
 
-目前我们的代码在更新子组件的时候，其他不相关的组件也会更新，这样的话，会导致不必要的计算
+## 14. 实现 useState
 
-代码如下
+先看代码：
 
 ```js
-import React from './core/React.js'
-
-let count1 = 0
 function Foo() {
-  console.log('foo')
+  const [count, setCount] = React.useState(10)
   function handleClick() {
-    count1++
-    React.update()
+    setCount(c => c + 1)
   }
 
   return (
     <div>
-      <button onClick={handleClick}>add</button>
-      count: {count1}
-    </div>
-  )
-}
-
-let count2 = 0
-function Bar() {
-  console.log('bar')
-  function handleClick() {
-    count2++
-    React.update()
-  }
-
-  return (
-    <div>
-      <button onClick={handleClick}>add</button>
-      count: {count2}
-    </div>
-  )
-}
-
-let count = 0
-let attribute = { id: 'app' }
-function App() {
-  console.log('app')
-  function handleClick() {
-    count++
-    React.update()
-  }
-
-  return (
-    <div {...attribute}>
-      hi-mini-react
       <button onClick={handleClick}>add</button>
       count: {count}
-      <Foo></Foo>
-      <Bar></Bar>
     </div>
   )
 }
-
-export default App
 ```
 
-点击每个子组件的按钮，另一个子组件也会输出
+我们定义了一个 count，在点击的时候，count + 1。
 
-所以我们只需要更新当前组件就可以了
+然后去实现 useState
 
-我们还需要一个全局变量，来保存这个组件，这就是起始更新的节点，结束更新的节点就是起始节点的 sibling
-
-在处理 FC 时给其赋值
+先把结构写出来：
 
 ```js
-let currentFc = null
+function useState(initialState) {
+  const state = initialState
 
+  const setState = action => {
+    action(state)
+  }
+
+  return [state, setState]
+}
+```
+
+在 setState 中，我们需要去执行 update 的操作
+
+```js
+function useState(initialState) {
+  const currentRoot = currentFc
+  const state = initialState
+
+  const setState = action => {
+    action(state)
+
+    wipRoot = {
+      ...currentRoot,
+      alternate: currentRoot
+    }
+    nextWorkOfUnit = wipRoot
+  }
+
+  return [state, setState]
+}
+```
+
+这里和上节是一样的，也是用闭包来实现的
+
+但我们调用 setState 的时候，stateHook.state 一直是初始值，所以我们需要把这个值与 fiber 绑定起来，每次先去看看 oldFiber 是否有 state
+
+```js
+function useState(initialState) {
+  const currentRoot = currentFc
+  const oldState = currentRoot.alternate?.state
+
+  const state = oldState || initialState
+
+  const setState = action => {
+    const newState = action(state)
+
+    wipRoot = {
+      ...currentRoot,
+      alternate: currentRoot
+    }
+
+    wipRoot.alternate.state = newState
+
+    nextWorkOfUnit = wipRoot
+  }
+
+  return [state, setState]
+}
+```
+
+这样我们点击按钮的时候，count 就一直 + 1
+
+我们再加一个 useState
+
+```js
+function Foo() {
+  const [count, setCount] = React.useState(10)
+  const [bar, setBar] = React.useState('bar')
+  function handleClick() {
+    setCount(c => c + 1)
+    setBar(s => s + 'bar')
+  }
+
+  return (
+    <div>
+      <button onClick={handleClick}>add</button>
+      <br />
+      count: {count}
+      <br />
+      bar: {bar}
+    </div>
+  )
+}
+```
+
+初始渲染没有问题，但点击按钮后，count 和 bar 都变成 barbar
+
+这是因为 useState 我们只保存了一个 state，所以会存在问题
+
+那就需要用数组处理了，还需要一个索引
+
+```js
+let states = []
+let stateIndex = 0
+```
+
+同时要做更新 fc 是重置，因为这里是处理下一个函数组件了
+
+```js
 function updateFunctionComponent(fiber) {
+  states = []
+  stateIndex = 0
+
   currentFc = fiber
   const children = [fiber.type(fiber.props)]
 
@@ -109,89 +165,116 @@ function updateFunctionComponent(fiber) {
 }
 ```
 
-我们在 update 函数中看看这个 currentFc
+那内部如何处理呢？
 
-结果发现不论点击哪个按钮，输出的都是 Bar 这个组件
+我们不能直接使用 states，因为这是一个全局变量，取得值不一定是当前组件的，所以还需要保存到 oldFiber 中
 
-确实是这样的，Bar 是最后执行的，只能保存最后的值
-
-所以我们需要使用闭包来解决这个问题
+先来写获取
 
 ```js
-function update() {
-  console.log(currentFc)
+const oldState = currentRoot.alternate?.states
 
-  let currentRoot = currentFc
-  return () => {
-    console.log(currentRoot)
+const state = oldState?.[stateIndex] || initialState
+```
+
+然后需要更新 states 和 stateIndex
+
+```js
+states[stateIndex] = state
+stateIndex++
+```
+
+那在 setState 中如果把 states 挂到 fiber 上呢
+
+我们可以把 states 再利用闭包传进去
+
+```js
+states[stateIndex] = state
+stateIndex++
+
+const currentStates = states
+
+const setState = action => {
+  const newState = action(state)
+
+  wipRoot = {
+    ...currentRoot,
+    alternate: currentRoot
+  }
+
+  wipRoot.alternate.states = currentStates
+
+  nextWorkOfUnit = wipRoot
+}
+```
+
+但我们已经用了一个 currentRoot 这个闭包了，现在又增加了一个，能不能把这两个合起来呢？
+
+我们可以发现
+
+```js
+wipRoot.alternate.states = currentStates
+```
+
+这里的 wipRoot.alternate 就是外面的 currentRoot
+
+所以我们可以在外面就把 states 绑定到 currentRoot 上
+
+```js
+states[stateIndex] = state
+stateIndex++
+
+currentRoot.states = states
+
+const setState = action => {
+  const newState = action(state)
+
+  wipRoot = {
+    ...currentRoot,
+    alternate: currentRoot
+  }
+
+  nextWorkOfUnit = wipRoot
+}
+```
+
+但现在 newState 还没有在 states 中更新
+
+点击按钮是没有效果的
+
+其实这里我们可以把 state 变成一个对象，利用对象地址引用的更新同步更新数据
+
+```js
+function useState(initialState) {
+  const currentRoot = currentFc
+  const oldState = currentRoot.alternate?.states
+
+  const stateHook = {
+    state: oldState?.[stateIndex]?.state || initialState
+  }
+
+  states[stateIndex] = stateHook
+  stateIndex++
+
+  currentRoot.states = states
+
+  const setState = action => {
+    stateHook.state = action(stateHook.state)
 
     wipRoot = {
-      dom: currentRoot.dom,
-      props: currentRoot.props,
+      ...currentRoot,
       alternate: currentRoot
     }
+
     nextWorkOfUnit = wipRoot
   }
+
+  return [stateHook.state, setState]
 }
 ```
 
-同时调用也需要改变一下
+这样点击就互不影响了
 
-```js
-function Foo() {
-  console.log('foo')
-  const update = React.update()
-  function handleClick() {
-    count1++
-    update()
-  }
+那我们把 Bar 和 App 的都改了吧
 
-  return (
-    <div>
-      <button onClick={handleClick}>add</button>
-      count: {count1}
-    </div>
-  )
-}
-```
-
-这样就只更新当前组件了
-
-但我们还没有设置结束更新的节点
-
-我们需要检测 nextWorkOfUnit 是不是 wipRoot 的 sibling，如果是的话，就需要停止更新了
-
-那我们先来看一下 wipRoot 的 sibling
-
-```js
-while (!shouldYield && nextWorkOfUnit) {
-  nextWorkOfUnit = performWorkOfUnit(nextWorkOfUnit)
-
-  console.log(wipRoot)
-
-  shouldYield = deadline.timeRemaining() < 1
-}
-```
-
-发现没有
-
-这是因为我们在 update 中只赋值了 dom、props、alternate，没有赋值 sibling
-
-所以可以重新赋值一下
-
-```js
-wipRoot = {
-  ...currentRoot,
-  alternate: currentRoot
-}
-```
-
-这样就拿到了，就可以判断了
-
-```js
-if (wipRoot?.sibling?.type === nextWorkOfUnit?.type) {
-  nextWorkOfUnit = null
-}
-```
-
-这样就只更新当前组件了
+也没有问题

@@ -180,6 +180,9 @@ function reconcileChildren(fiber, children) {
 }
 
 function updateFunctionComponent(fiber) {
+  states = []
+  stateIndex = 0
+
   currentFc = fiber
   const children = [fiber.type(fiber.props)]
 
@@ -235,7 +238,37 @@ function update() {
   }
 }
 
+let states = []
+let stateIndex = 0
+function useState(initialState) {
+  const currentRoot = currentFc
+  const oldState = currentRoot.alternate?.states
+
+  const stateHook = {
+    state: oldState?.[stateIndex]?.state || initialState
+  }
+
+  states[stateIndex] = stateHook
+  stateIndex++
+
+  currentRoot.states = states
+
+  const setState = action => {
+    stateHook.state = action(stateHook.state)
+
+    wipRoot = {
+      ...currentRoot,
+      alternate: currentRoot
+    }
+
+    nextWorkOfUnit = wipRoot
+  }
+
+  return [stateHook.state, setState]
+}
+
 const React = {
+  useState,
   update,
   render,
   createElement
