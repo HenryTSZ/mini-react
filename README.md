@@ -24,84 +24,174 @@
 
 ## [11. diff-删除多余的老节点](https://github.com/HenryTSZ/mini-react/tree/4d542bf6e2d938b05b273e8579d2df9357403ef4)
 
-## 12. 解决 edge case 的方式
+## [12. 解决 edge case 的方式](https://github.com/HenryTSZ/mini-react/tree/abc8bb86e6b9e2a7143f31c64f1fa9d77c607855)
 
-我们看一下用这种方式展示组件
+## 13. 优化更新 减少不必要的计算
 
-```js
-let show = false
+目前我们的代码在更新子组件的时候，其他不相关的组件也会更新，这样的话，会导致不必要的计算
 
-return (
-  <div {...attribute}>
-    hi-mini-react
-    <Counter num={10}></Counter>
-    <button onClick={handleClick}>add</button>
-    count: {count}
-    {show && bar}
-  </div>
-)
-```
-
-页面直接报错了：
-
-> Uncaught TypeError: Cannot read properties of undefined (reading 'dom')
-
-这是因为 createElement 中 child 这个节点被渲染为 false 了，show && bar 返回的确实就是 false
-
-所以我们需要处理一下这种情况
-
-我们可以在这里直接过滤掉 child 为 false 的节点，这样就不会报错了
+代码如下
 
 ```js
-children: children.reduce((acc, child) => {
-  if (child === false) {
-    return acc
+import React from './core/React.js'
+
+let count1 = 0
+function Foo() {
+  console.log('foo')
+  function handleClick() {
+    count1++
+    React.update()
   }
-  const isTextNode = typeof child === 'string' || typeof child === 'number'
-  return acc.concat(isTextNode ? createTextNode(child) : child)
-}, [])
+
+  return (
+    <div>
+      <button onClick={handleClick}>add</button>
+      count: {count1}
+    </div>
+  )
+}
+
+let count2 = 0
+function Bar() {
+  console.log('bar')
+  function handleClick() {
+    count2++
+    React.update()
+  }
+
+  return (
+    <div>
+      <button onClick={handleClick}>add</button>
+      count: {count2}
+    </div>
+  )
+}
+
+let count = 0
+let attribute = { id: 'app' }
+function App() {
+  console.log('app')
+  function handleClick() {
+    count++
+    React.update()
+  }
+
+  return (
+    <div {...attribute}>
+      hi-mini-react
+      <button onClick={handleClick}>add</button>
+      count: {count}
+      <Foo></Foo>
+      <Bar></Bar>
+    </div>
+  )
+}
+
+export default App
 ```
 
-这样就没有问题了
+点击每个子组件的按钮，另一个子组件也会输出
 
-那如果调换一下顺序呢：
+所以我们只需要更新当前组件就可以了
 
-```js
-return (
-  <div {...attribute}>
-    hi-mini-react
-    <Counter num={10}></Counter>
-    <button onClick={handleClick}>add</button>
-    {show && bar}
-    count: {count}
-  </div>
-)
-```
+我们还需要一个全局变量，来保存这个组件，这就是起始更新的节点，结束更新的节点就是起始节点的 sibling
 
-但渲染有点问题，顺序不对了
-
-![](./img/026.gif)
-
-是不是删除节点有问题，打断点调试一下
-
-由于页面有两个 count:，所以我们修改一处
+在处理 FC 时给其赋值
 
 ```js
-function Counter({ num }) {
-  return <div>num: {num}</div>
+let currentFc = null
+
+function updateFunctionComponent(fiber) {
+  currentFc = fiber
+  const children = [fiber.type(fiber.props)]
+
+  reconcileChildren(fiber, children)
 }
 ```
 
-![](./img/027.png)
+我们在 update 函数中看看这个 currentFc
 
-可以看到确实把旧的 count: 删除了，但新的 count: 却在旧的后面
+结果发现不论点击哪个按钮，输出的都是 Bar 这个组件
 
-这个其实画图就可以理解了
+确实是这样的，Bar 是最后执行的，只能保存最后的值
 
-或者简单说一下，原来的 count: 的 sibling 是 0，
+所以我们需要使用闭包来解决这个问题
 
-更新后，bar 对应的是旧的 count:，所以把旧的删除了，但新的 count: 就是 bar 的 sibling，对应的就是旧的 0，而且 type 一致，故执行更新了，新的 1 就只能添加了，到了 bar 的后面
+```js
+function update() {
+  console.log(currentFc)
 
-所以 {false && 组件} 这种情况，不能简单的这样处理
+  let currentRoot = currentFc
+  return () => {
+    console.log(currentRoot)
 
-这个只能自己去 react 源码查看解决方式了
+    wipRoot = {
+      dom: currentRoot.dom,
+      props: currentRoot.props,
+      alternate: currentRoot
+    }
+    nextWorkOfUnit = wipRoot
+  }
+}
+```
+
+同时调用也需要改变一下
+
+```js
+function Foo() {
+  console.log('foo')
+  const update = React.update()
+  function handleClick() {
+    count1++
+    update()
+  }
+
+  return (
+    <div>
+      <button onClick={handleClick}>add</button>
+      count: {count1}
+    </div>
+  )
+}
+```
+
+这样就只更新当前组件了
+
+但我们还没有设置结束更新的节点
+
+我们需要检测 nextWorkOfUnit 是不是 wipRoot 的 sibling，如果是的话，就需要停止更新了
+
+那我们先来看一下 wipRoot 的 sibling
+
+```js
+while (!shouldYield && nextWorkOfUnit) {
+  nextWorkOfUnit = performWorkOfUnit(nextWorkOfUnit)
+
+  console.log(wipRoot)
+
+  shouldYield = deadline.timeRemaining() < 1
+}
+```
+
+发现没有
+
+这是因为我们在 update 中只赋值了 dom、props、alternate，没有赋值 sibling
+
+所以可以重新赋值一下
+
+```js
+wipRoot = {
+  ...currentRoot,
+  alternate: currentRoot
+}
+```
+
+这样就拿到了，就可以判断了
+
+```js
+if (wipRoot?.sibling?.type === nextWorkOfUnit?.type) {
+  nextWorkOfUnit = null
+}
+```
+
+这样就只更新当前组件了

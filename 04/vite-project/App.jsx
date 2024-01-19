@@ -1,38 +1,56 @@
 import React from './core/React.js'
 
-function Counter({ num }) {
-  return <div>num: {num}</div>
+let count1 = 0
+function Foo() {
+  console.log('foo')
+  const update = React.update()
+  function handleClick() {
+    count1++
+    update()
+  }
+
+  return (
+    <div>
+      <button onClick={handleClick}>add</button>
+      count: {count1}
+    </div>
+  )
+}
+
+let count2 = 0
+function Bar() {
+  console.log('bar')
+  const update = React.update()
+  function handleClick() {
+    count2++
+    update()
+  }
+
+  return (
+    <div>
+      <button onClick={handleClick}>add</button>
+      count: {count2}
+    </div>
+  )
 }
 
 let count = 0
 let attribute = { id: 'app' }
-let show = false
-
 function App() {
+  console.log('app')
+  const update = React.update()
   function handleClick() {
     count++
-    attribute = { id: 'app' + count }
-    console.log(count)
-    show = !show
-    React.update()
+    update()
   }
-
-  const foo = (
-    <div>
-      foo
-      <div>child</div>
-      <div>child1</div>
-    </div>
-  )
-  const bar = <div>bar</div>
 
   return (
     <div {...attribute}>
       hi-mini-react
-      <Counter num={10}></Counter>
       <button onClick={handleClick}>add</button>
-      {show && bar}
       count: {count}
+      <Foo></Foo>
+      <Bar></Bar>
     </div>
   )
 }
