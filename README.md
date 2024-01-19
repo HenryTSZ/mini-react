@@ -22,20 +22,14 @@
 
 ## [10. diff-更新 children](https://github.com/HenryTSZ/mini-react/tree/93e9c87f642f6d68bad76f7e302700bf17fdb9d4)
 
-## 11. diff-删除多余的老节点
+## [11. diff-删除多余的老节点](https://github.com/HenryTSZ/mini-react/tree/4d542bf6e2d938b05b273e8579d2df9357403ef4)
 
-新的节点比旧的短，多出来的需要删除
+## 12. 解决 edge case 的方式
 
-代码如下
+我们看一下用这种方式展示组件
 
 ```js
-const foo = (
-  <div>
-    foo
-    <div>child</div>
-  </div>
-)
-const bar = <div>bar</div>
+let show = false
 
 return (
   <div {...attribute}>
@@ -43,50 +37,71 @@ return (
     <Counter num={10}></Counter>
     <button onClick={handleClick}>add</button>
     count: {count}
-    {show ? foo : bar}
+    {show && bar}
   </div>
 )
 ```
 
-可以看到 foo 比 bar 多一个子节点
+页面直接报错了：
 
-点击按钮看一下效果：
+> Uncaught TypeError: Cannot read properties of undefined (reading 'dom')
 
-![](./img/025.png)
+这是因为 createElement 中 child 这个节点被渲染为 false 了，show && bar 返回的确实就是 false
 
-可以看到 bar 替换了 foo，但 foo 的 child 没有被删除
+所以我们需要处理一下这种情况
 
-是因为我们新节点的 children 循环到 bar(对应的旧节点：foo) 就结束了，所以 foo 的 child 没有循环到，所以没有被删除
-
-我们在循环结束还需要判断 oldFiber 是否有值，有值的话还需要再删除
+我们可以在这里直接过滤掉 child 为 false 的节点，这样就不会报错了
 
 ```js
-if (oldFiber) {
-  deleteList.push(oldFiber)
-}
+children: children.reduce((acc, child) => {
+  if (child === false) {
+    return acc
+  }
+  const isTextNode = typeof child === 'string' || typeof child === 'number'
+  return acc.concat(isTextNode ? createTextNode(child) : child)
+}, [])
 ```
 
-这样就没问题了
+这样就没有问题了
 
-那如果 foo 还有一个子节点呢：
+那如果调换一下顺序呢：
 
 ```js
-const foo = (
-  <div>
-    foo
-    <div>child</div>
-    <div>child1</div>
+return (
+  <div {...attribute}>
+    hi-mini-react
+    <Counter num={10}></Counter>
+    <button onClick={handleClick}>add</button>
+    {show && bar}
+    count: {count}
   </div>
 )
 ```
 
-和上面情况有点类似，child1 又没有删除掉
+但渲染有点问题，顺序不对了
 
-所以我们还需要再递归查找 sibling，直到没有 sibling 了
+![](./img/026.gif)
+
+是不是删除节点有问题，打断点调试一下
+
+由于页面有两个 count:，所以我们修改一处
 
 ```js
-while (oldFiber) {
-  deleteList.push(oldFiber)
-  oldFiber = oldFiber.sibling
+function Counter({ num }) {
+  return <div>num: {num}</div>
 }
 ```
+
+![](./img/027.png)
+
+可以看到确实把旧的 count: 删除了，但新的 count: 却在旧的后面
+
+这个其实画图就可以理解了
+
+或者简单说一下，原来的 count: 的 sibling 是 0，
+
+更新后，bar 对应的是旧的 count:，所以把旧的删除了，但新的 count: 就是 bar 的 sibling，对应的就是旧的 0，而且 type 一致，故执行更新了，新的 1 就只能添加了，到了 bar 的后面
+
+所以 {false && 组件} 这种情况，不能简单的这样处理
+
+这个只能自己去 react 源码查看解决方式了

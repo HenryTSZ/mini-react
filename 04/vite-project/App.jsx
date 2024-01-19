@@ -1,12 +1,12 @@
 import React from './core/React.js'
 
 function Counter({ num }) {
-  return <div>count: {num}</div>
+  return <div>num: {num}</div>
 }
 
 let count = 0
 let attribute = { id: 'app' }
-let show = true
+let show = false
 
 function App() {
   function handleClick() {
@@ -31,8 +31,8 @@ function App() {
       hi-mini-react
       <Counter num={10}></Counter>
       <button onClick={handleClick}>add</button>
+      {show && bar}
       count: {count}
-      {show ? foo : bar}
     </div>
   )
 }

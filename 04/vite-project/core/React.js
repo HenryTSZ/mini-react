@@ -13,10 +13,17 @@ function createElement(type, props, ...children) {
     type,
     props: {
       ...props,
-      children: children.map(child => {
+      // children: children.map(child => {
+      //   const isTextNode = typeof child === 'string' || typeof child === 'number'
+      //   return isTextNode ? createTextNode(child) : child
+      // })
+      children: children.reduce((acc, child) => {
+        if (child === false) {
+          return acc
+        }
         const isTextNode = typeof child === 'string' || typeof child === 'number'
-        return isTextNode ? createTextNode(child) : child
-      })
+        return acc.concat(isTextNode ? createTextNode(child) : child)
+      }, [])
     }
   }
 }
