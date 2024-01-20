@@ -30,67 +30,37 @@
 
 ## [14. 实现 useState](https://github.com/HenryTSZ/mini-react/tree/5d767a6318a4d5c079ccfba2379e18c72e5c53d4)
 
-## 15. 批量执行 action
+## [15. 批量执行 action](https://github.com/HenryTSZ/mini-react/tree/ac4b821ed9ce319d8c0a4b36b28b5c7e23eefde1)
 
-上一小节没有细测，发现还是有问题的
+## 16. action 支持非函数和提前检测 减少不必要的更新
 
-可以看到点击 app 按钮后，两个子组件的数据变了，估计应该是 oldFiber 找错了
-
-看群里有大佬说可以这样写：
+目前我们的 action 只支持函数，我们可以把非函数的 action 转变成函数，这样处理逻辑就一致了，通过数据减少逻辑的复杂度
 
 ```js
-const setState = action => {
-  stateHook.state = action(stateHook.state)
+stateHook.queue.push(typeof action === 'function' ? action : () => action)
+```
 
-  // wipRoot = {
-  //   ...currentRoot,
-  //   alternate: currentRoot
-  // }
-  wipRoot = currentRoot
-  wipRoot.alternate = currentRoot
+尝试一下
 
-  nextWorkOfUnit = wipRoot
+```js
+function handleClick() {
+  setCount(c => c + 1)
+  setBar('bar11')
 }
 ```
 
-这样写确实点击 app 不影响子组件的数据变化，但一个组件内有多个 state，只有第一个会更新，还是有问题
+没有问题
 
-这个就留作后续的作业吧
+但点击第三下的时候，bar 依然是 bar11，就不用执行更新逻辑了，所以我们需要判断是否需要执行更新逻辑
 
-接下来看批量执行 action
-
-在 react 中是异步更新的，但我们的 state 是同步的，所以不会有多次渲染更新的问题
-
-比如第一个 setState 执行了，给 wipRoot 赋值了，但紧接着又开始执行另一个 setState 了，浏览器没有空闲时间，所以上一个 wipRoot 还不会去渲染更新，而第二个 wipRoot 就会在空闲时间后渲染更新，大家也可以通过打断点的方式来观察更新的情况，我就是这样做的，看视频理解不了，以为第一次给 wipRoot 赋值后就更新了，那下次就又会再更新一次，后来打断点才了解了原理
-
-但我们也模拟一下 react 吧
-
-那就不能在 setState 直接调用了，而是要保存起来，就还需要有一个数组来存储
+我们在 push 前判断一下
 
 ```js
-const stateHook = {
-  state: oldState?.[stateIndex]?.state || initialState,
-  queue: []
+const eagerState = typeof action === 'function' ? action(stateHook.state) : action
+if (eagerState === stateHook.state) {
+  return
 }
-const setState = action => {
-  stateHook.queue.push(action)
-}
-```
-
-后面的就与 stateHook.state 类似了
-
-再下次更新的时候调用
-
-```js
-const stateHook = {
-  state: oldState?.[stateIndex]?.state || initialState,
-  queue: oldState?.[stateIndex]?.queue || []
-}
-
-stateHook.queue.forEach(action => {
-  stateHook.state = action(stateHook.state)
-})
-stateHook.queue = []
+stateHook.queue.push(typeof action === 'function' ? action : () => action)
 ```
 
 这样就完成了
