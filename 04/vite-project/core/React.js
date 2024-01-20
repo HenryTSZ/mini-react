@@ -245,8 +245,14 @@ function useState(initialState) {
   const oldState = currentRoot.alternate?.states
 
   const stateHook = {
-    state: oldState?.[stateIndex]?.state || initialState
+    state: oldState?.[stateIndex]?.state || initialState,
+    queue: oldState?.[stateIndex]?.queue || []
   }
+
+  stateHook.queue.forEach(action => {
+    stateHook.state = action(stateHook.state)
+  })
+  stateHook.queue = []
 
   states[stateIndex] = stateHook
   stateIndex++
@@ -254,7 +260,7 @@ function useState(initialState) {
   currentRoot.states = states
 
   const setState = action => {
-    stateHook.state = action(stateHook.state)
+    stateHook.queue.push(action)
 
     wipRoot = {
       ...currentRoot,

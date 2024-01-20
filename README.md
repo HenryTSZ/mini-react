@@ -28,253 +28,69 @@
 
 ## [13. 优化更新 减少不必要的计算](https://github.com/HenryTSZ/mini-react/tree/9e7205532a13eeb0592f07b82131998619b798ba)
 
-## 14. 实现 useState
+## [14. 实现 useState](https://github.com/HenryTSZ/mini-react/tree/5d767a6318a4d5c079ccfba2379e18c72e5c53d4)
 
-先看代码：
+## 15. 批量执行 action
 
-```js
-function Foo() {
-  const [count, setCount] = React.useState(10)
-  function handleClick() {
-    setCount(c => c + 1)
-  }
+上一小节没有细测，发现还是有问题的
 
-  return (
-    <div>
-      <button onClick={handleClick}>add</button>
-      count: {count}
-    </div>
-  )
-}
-```
+可以看到点击 app 按钮后，两个子组件的数据变了，估计应该是 oldFiber 找错了
 
-我们定义了一个 count，在点击的时候，count + 1。
-
-然后去实现 useState
-
-先把结构写出来：
+看群里有大佬说可以这样写：
 
 ```js
-function useState(initialState) {
-  const state = initialState
-
-  const setState = action => {
-    action(state)
-  }
-
-  return [state, setState]
-}
-```
-
-在 setState 中，我们需要去执行 update 的操作
-
-```js
-function useState(initialState) {
-  const currentRoot = currentFc
-  const state = initialState
-
-  const setState = action => {
-    action(state)
-
-    wipRoot = {
-      ...currentRoot,
-      alternate: currentRoot
-    }
-    nextWorkOfUnit = wipRoot
-  }
-
-  return [state, setState]
-}
-```
-
-这里和上节是一样的，也是用闭包来实现的
-
-但我们调用 setState 的时候，stateHook.state 一直是初始值，所以我们需要把这个值与 fiber 绑定起来，每次先去看看 oldFiber 是否有 state
-
-```js
-function useState(initialState) {
-  const currentRoot = currentFc
-  const oldState = currentRoot.alternate?.state
-
-  const state = oldState || initialState
-
-  const setState = action => {
-    const newState = action(state)
-
-    wipRoot = {
-      ...currentRoot,
-      alternate: currentRoot
-    }
-
-    wipRoot.alternate.state = newState
-
-    nextWorkOfUnit = wipRoot
-  }
-
-  return [state, setState]
-}
-```
-
-这样我们点击按钮的时候，count 就一直 + 1
-
-我们再加一个 useState
-
-```js
-function Foo() {
-  const [count, setCount] = React.useState(10)
-  const [bar, setBar] = React.useState('bar')
-  function handleClick() {
-    setCount(c => c + 1)
-    setBar(s => s + 'bar')
-  }
-
-  return (
-    <div>
-      <button onClick={handleClick}>add</button>
-      <br />
-      count: {count}
-      <br />
-      bar: {bar}
-    </div>
-  )
-}
-```
-
-初始渲染没有问题，但点击按钮后，count 和 bar 都变成 barbar
-
-这是因为 useState 我们只保存了一个 state，所以会存在问题
-
-那就需要用数组处理了，还需要一个索引
-
-```js
-let states = []
-let stateIndex = 0
-```
-
-同时要做更新 fc 是重置，因为这里是处理下一个函数组件了
-
-```js
-function updateFunctionComponent(fiber) {
-  states = []
-  stateIndex = 0
-
-  currentFc = fiber
-  const children = [fiber.type(fiber.props)]
-
-  reconcileChildren(fiber, children)
-}
-```
-
-那内部如何处理呢？
-
-我们不能直接使用 states，因为这是一个全局变量，取得值不一定是当前组件的，所以还需要保存到 oldFiber 中
-
-先来写获取
-
-```js
-const oldState = currentRoot.alternate?.states
-
-const state = oldState?.[stateIndex] || initialState
-```
-
-然后需要更新 states 和 stateIndex
-
-```js
-states[stateIndex] = state
-stateIndex++
-```
-
-那在 setState 中如果把 states 挂到 fiber 上呢
-
-我们可以把 states 再利用闭包传进去
-
-```js
-states[stateIndex] = state
-stateIndex++
-
-const currentStates = states
-
 const setState = action => {
-  const newState = action(state)
+  stateHook.state = action(stateHook.state)
 
-  wipRoot = {
-    ...currentRoot,
-    alternate: currentRoot
-  }
-
-  wipRoot.alternate.states = currentStates
+  // wipRoot = {
+  //   ...currentRoot,
+  //   alternate: currentRoot
+  // }
+  wipRoot = currentRoot
+  wipRoot.alternate = currentRoot
 
   nextWorkOfUnit = wipRoot
 }
 ```
 
-但我们已经用了一个 currentRoot 这个闭包了，现在又增加了一个，能不能把这两个合起来呢？
+这样写确实点击 app 不影响子组件的数据变化，但一个组件内有多个 state，只有第一个会更新，还是有问题
 
-我们可以发现
+这个就留作后续的作业吧
+
+接下来看批量执行 action
+
+在 react 中是异步更新的，但我们的 state 是同步的，所以不会有多次渲染更新的问题
+
+比如第一个 setState 执行了，给 wipRoot 赋值了，但紧接着又开始执行另一个 setState 了，浏览器没有空闲时间，所以上一个 wipRoot 还不会去渲染更新，而第二个 wipRoot 就会在空闲时间后渲染更新，大家也可以通过打断点的方式来观察更新的情况，我就是这样做的，看视频理解不了，以为第一次给 wipRoot 赋值后就更新了，那下次就又会再更新一次，后来打断点才了解了原理
+
+但我们也模拟一下 react 吧
+
+那就不能在 setState 直接调用了，而是要保存起来，就还需要有一个数组来存储
 
 ```js
-wipRoot.alternate.states = currentStates
-```
-
-这里的 wipRoot.alternate 就是外面的 currentRoot
-
-所以我们可以在外面就把 states 绑定到 currentRoot 上
-
-```js
-states[stateIndex] = state
-stateIndex++
-
-currentRoot.states = states
-
+const stateHook = {
+  state: oldState?.[stateIndex]?.state || initialState,
+  queue: []
+}
 const setState = action => {
-  const newState = action(state)
-
-  wipRoot = {
-    ...currentRoot,
-    alternate: currentRoot
-  }
-
-  nextWorkOfUnit = wipRoot
+  stateHook.queue.push(action)
 }
 ```
 
-但现在 newState 还没有在 states 中更新
+后面的就与 stateHook.state 类似了
 
-点击按钮是没有效果的
-
-其实这里我们可以把 state 变成一个对象，利用对象地址引用的更新同步更新数据
+再下次更新的时候调用
 
 ```js
-function useState(initialState) {
-  const currentRoot = currentFc
-  const oldState = currentRoot.alternate?.states
-
-  const stateHook = {
-    state: oldState?.[stateIndex]?.state || initialState
-  }
-
-  states[stateIndex] = stateHook
-  stateIndex++
-
-  currentRoot.states = states
-
-  const setState = action => {
-    stateHook.state = action(stateHook.state)
-
-    wipRoot = {
-      ...currentRoot,
-      alternate: currentRoot
-    }
-
-    nextWorkOfUnit = wipRoot
-  }
-
-  return [stateHook.state, setState]
+const stateHook = {
+  state: oldState?.[stateIndex]?.state || initialState,
+  queue: oldState?.[stateIndex]?.queue || []
 }
+
+stateHook.queue.forEach(action => {
+  stateHook.state = action(stateHook.state)
+})
+stateHook.queue = []
 ```
 
-这样点击就互不影响了
-
-那我们把 Bar 和 App 的都改了吧
-
-也没有问题
+这样就完成了

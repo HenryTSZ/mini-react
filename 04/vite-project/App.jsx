@@ -23,6 +23,7 @@ function Bar() {
   const [count, setCount] = React.useState(10)
   function handleClick() {
     setCount(c => c + 1)
+    setCount(c => c + 1)
   }
 
   return (
