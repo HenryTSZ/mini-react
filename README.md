@@ -34,197 +34,93 @@
 
 ## [16. action 支持非函数和提前检测 减少不必要的更新](https://github.com/HenryTSZ/mini-react/tree/0ce3cf8afcfe131a38d91405ca49c84a3e7d2daa)
 
-## 17. 实现 useEffect
+## [17. 实现 useEffect](https://github.com/HenryTSZ/mini-react/tree/a813b54cb5e19ab3cc20be7b40d3c1900615d1fa)
 
-useEffect 接收两个参数：一个是 callback，另一个是依赖列表 deps。如果依赖列表为空，则会在组件第一次渲染时执行，否则会在依赖列表变化时执行。
+## 18. 实现 cleanup
 
-我们先来实现 deps 为空的情况
+useEffect 还有一个 cleanup 的功能，它可以在组件卸载的时候调用，可以在组件卸载的时候执行一些清理工作。
+
+cleanup 在调用 useEffect 之前进行调用，当 deps 为空的时候不会调用返回的 cleanup
+
+所以我们需要先将 cleanup 存起来
 
 ```js
-React.useEffect(() => {
-  console.log('useEffect')
-}, [])
+effects.push({
+  callback,
+  deps,
+  cleanup: undefined
+})
 ```
 
-由于 callback 不是在调用 useEffect 的时候就执行，所以我们需要在 useEffect 里面先将其保存，等页面渲染完成后再调用
+然后在调用 callback 时给其赋值
 
 ```js
-const useEffect = (callback, deps) => {
-  const currentRoot = currentFc
-
-  currentRoot.effectHook = {
-    callback,
-    deps
-  }
-}
+fiber.effectHooks?.forEach(effect => {
+  effect.cleanup = effect.callback()
+})
 ```
 
-然后在 commitWork 结束后再执行 callback
-
-执行也是遍历整棵树，然后执行 callback
+由于是在 useEffect 之前调用，所以
 
 ```js
-function commitRoot() {
-  commitWork(wipRoot.child)
-  deleteDom()
-  commitEffect(wipRoot)
-  currentRoot = wipRoot
-  wipRoot = null
-  deleteList = []
-}
+commitCleanup(wipRoot)
+commitEffect(wipRoot)
+```
 
-function commitEffect(fiber) {
+调用的话和 commitEffect 相似，要注意是调用 fiber.alternate 的 effectHooks
+
+```js
+function commitCleanup(fiber) {
   if (!fiber) {
     return
   }
 
-  fiber.effectHook?.callback()
+  fiber.alternate?.effectHooks?.forEach(effect => {
+    if (effect.cleanup) {
+      effect.cleanup()
+    }
+  })
 
-  commitEffect(fiber.child)
-  commitEffect(fiber.sibling)
+  commitCleanup(fiber.child)
+  commitCleanup(fiber.sibling)
 }
 ```
 
-这样初始化调用就完成了
-
-然后我们再来实现根据 deps 来调用
-
-这里要分成两种情况来处理：
-
-一种是初始化，全部都需要调用，不管有没有 deps
-
-另一种就是更新，只用 deps 改变的才需要调用
-
-我们可以利用 alternate 来区分这两种情况
-
-```js
-if (!fiber.alternate) {
-  // init
-  fiber.effectHook?.callback()
-} else {
-  // update
-}
-```
-
-先测试一下，看看有没有破坏老功能，查看页面输出是没有问题的
-
-然后就需要根据 deps 是否改变来调用 callback
-
-```js
-if (fiber.effectHook) {
-  const needUpdate = fiber.effectHook.deps.some(
-    (dep, index) => dep !== fiber.alternate.effectHook.deps[index]
-  )
-  if (needUpdate) {
-    fiber.effectHook.callback()
-  }
-}
-```
-
-测试一下：
+测试一下
 
 ```js
 React.useEffect(() => {
+  console.log('useEffect', 'init')
+  return () => {
+    console.log('cleanup', 'destroy')
+  }
+}, [])
+
+React.useEffect(() => {
+  console.log('useEffect', 1)
+  return () => {
+    console.log('cleanup', 1)
+  }
+}, [1])
+
+React.useEffect(() => {
   console.log('useEffect', count)
+  return () => {
+    console.log('cleanup', count)
+  }
 }, [count])
 ```
 
 没有问题
 
-再测试一下依赖项不变是否可以：
+然后去处理 deps 为空不调用的逻辑
 
 ```js
-React.useEffect(() => {
-  console.log('useEffect', 1)
-}, [1])
-```
-
-也没有问题
-
-然后再来看看有多个 useEffect 的情况，那这种就需要使用数组来存储了
-
-与 useState 相似
-
-```js
-let effects = []
-const useEffect = (callback, deps) => {
-  const currentRoot = currentFc
-
-  effects.push({
-    callback,
-    deps
-  })
-
-  currentRoot.effectHooks = effects
-}
-```
-
-```js
-function updateFunctionComponent(fiber) {
-  states = []
-  stateIndex = 0
-  effects = []
-}
-```
-
-```js
-function commitEffect(fiber) {
-  if (!fiber) {
-    return
-  }
-
-  if (!fiber.alternate) {
-    // init
-    fiber.effectHooks?.forEach(effect => {
-      effect.callback()
-    })
-  } else {
-    // update
-    fiber.effectHooks?.forEach((effect, i) => {
-      const needUpdate = effect.deps.some(
-        (dep, index) => dep !== fiber.alternate.effectHooks[i].deps[index]
-      )
-      if (needUpdate) {
-        effect.callback()
-      }
-    })
-  }
-
-  commitEffect(fiber.child)
-  commitEffect(fiber.sibling)
-}
-```
-
-测试一下：
-
-```js
-React.useEffect(() => {
-  console.log('useEffect', 'init')
-}, [])
-
-React.useEffect(() => {
-  console.log('useEffect', 1)
-}, [1])
-
-React.useEffect(() => {
-  console.log('useEffect', count)
-}, [count])
-```
-
-功能没有问题
-
-update 时我们还可以去优化一下，如果没有 deps，那就不需要执行 callback 了
-
-```js
-fiber.effectHooks?.forEach((effect, i) => {
-  if (!effect.deps.length) {
-    return
-  }
-  const needUpdate = effect.deps.some(
-    (dep, index) => dep !== fiber.alternate.effectHooks[i].deps[index]
-  )
-  if (needUpdate) {
-    effect.callback()
+fiber.alternate?.effectHooks?.forEach(effect => {
+  if (effect.deps.length && effect.cleanup) {
+    effect.cleanup()
   }
 })
 ```
+
+再测试一下，`console.log('cleanup', 'destroy')` 这个就不会输出了

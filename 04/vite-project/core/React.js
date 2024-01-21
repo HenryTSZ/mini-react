@@ -67,10 +67,26 @@ function workLoop(deadline) {
 function commitRoot() {
   commitWork(wipRoot.child)
   deleteDom()
+  commitCleanup(wipRoot)
   commitEffect(wipRoot)
   currentRoot = wipRoot
   wipRoot = null
   deleteList = []
+}
+
+function commitCleanup(fiber) {
+  if (!fiber) {
+    return
+  }
+
+  fiber.alternate?.effectHooks?.forEach(effect => {
+    if (effect.deps.length && effect.cleanup) {
+      effect.cleanup()
+    }
+  })
+
+  commitCleanup(fiber.child)
+  commitCleanup(fiber.sibling)
 }
 
 function commitEffect(fiber) {
@@ -81,7 +97,7 @@ function commitEffect(fiber) {
   if (!fiber.alternate) {
     // init
     fiber.effectHooks?.forEach(effect => {
-      effect.callback()
+      effect.cleanup = effect.callback()
     })
   } else {
     // update
@@ -93,7 +109,7 @@ function commitEffect(fiber) {
         (dep, index) => dep !== fiber.alternate.effectHooks[i].deps[index]
       )
       if (needUpdate) {
-        effect.callback()
+        effect.cleanup = effect.callback()
       }
     })
   }
@@ -314,7 +330,8 @@ const useEffect = (callback, deps) => {
 
   effects.push({
     callback,
-    deps
+    deps,
+    cleanup: undefined
   })
 
   currentRoot.effectHooks = effects

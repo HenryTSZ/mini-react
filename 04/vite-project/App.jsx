@@ -47,14 +47,23 @@ function App() {
 
   React.useEffect(() => {
     console.log('useEffect', 'init')
+    return () => {
+      console.log('cleanup', 'destroy')
+    }
   }, [])
 
   React.useEffect(() => {
     console.log('useEffect', 1)
+    return () => {
+      console.log('cleanup', 1)
+    }
   }, [1])
 
   React.useEffect(() => {
     console.log('useEffect', count)
+    return () => {
+      console.log('cleanup', count)
+    }
   }, [count])
 
   return (
