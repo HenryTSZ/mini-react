@@ -67,9 +67,39 @@ function workLoop(deadline) {
 function commitRoot() {
   commitWork(wipRoot.child)
   deleteDom()
+  commitEffect(wipRoot)
   currentRoot = wipRoot
   wipRoot = null
   deleteList = []
+}
+
+function commitEffect(fiber) {
+  if (!fiber) {
+    return
+  }
+
+  if (!fiber.alternate) {
+    // init
+    fiber.effectHooks?.forEach(effect => {
+      effect.callback()
+    })
+  } else {
+    // update
+    fiber.effectHooks?.forEach((effect, i) => {
+      if (!effect.deps.length) {
+        return
+      }
+      const needUpdate = effect.deps.some(
+        (dep, index) => dep !== fiber.alternate.effectHooks[i].deps[index]
+      )
+      if (needUpdate) {
+        effect.callback()
+      }
+    })
+  }
+
+  commitEffect(fiber.child)
+  commitEffect(fiber.sibling)
 }
 
 function deleteDom(list = deleteList) {
@@ -182,6 +212,7 @@ function reconcileChildren(fiber, children) {
 function updateFunctionComponent(fiber) {
   states = []
   stateIndex = 0
+  effects = []
 
   currentFc = fiber
   const children = [fiber.type(fiber.props)]
@@ -277,7 +308,20 @@ function useState(initialState) {
   return [stateHook.state, setState]
 }
 
+let effects = []
+const useEffect = (callback, deps) => {
+  const currentRoot = currentFc
+
+  effects.push({
+    callback,
+    deps
+  })
+
+  currentRoot.effectHooks = effects
+}
+
 const React = {
+  useEffect,
   useState,
   update,
   render,

@@ -32,35 +32,199 @@
 
 ## [15. 批量执行 action](https://github.com/HenryTSZ/mini-react/tree/ac4b821ed9ce319d8c0a4b36b28b5c7e23eefde1)
 
-## 16. action 支持非函数和提前检测 减少不必要的更新
+## [16. action 支持非函数和提前检测 减少不必要的更新](https://github.com/HenryTSZ/mini-react/tree/0ce3cf8afcfe131a38d91405ca49c84a3e7d2daa)
 
-目前我们的 action 只支持函数，我们可以把非函数的 action 转变成函数，这样处理逻辑就一致了，通过数据减少逻辑的复杂度
+## 17. 实现 useEffect
+
+useEffect 接收两个参数：一个是 callback，另一个是依赖列表 deps。如果依赖列表为空，则会在组件第一次渲染时执行，否则会在依赖列表变化时执行。
+
+我们先来实现 deps 为空的情况
 
 ```js
-stateHook.queue.push(typeof action === 'function' ? action : () => action)
+React.useEffect(() => {
+  console.log('useEffect')
+}, [])
 ```
 
-尝试一下
+由于 callback 不是在调用 useEffect 的时候就执行，所以我们需要在 useEffect 里面先将其保存，等页面渲染完成后再调用
 
 ```js
-function handleClick() {
-  setCount(c => c + 1)
-  setBar('bar11')
+const useEffect = (callback, deps) => {
+  const currentRoot = currentFc
+
+  currentRoot.effectHook = {
+    callback,
+    deps
+  }
 }
+```
+
+然后在 commitWork 结束后再执行 callback
+
+执行也是遍历整棵树，然后执行 callback
+
+```js
+function commitRoot() {
+  commitWork(wipRoot.child)
+  deleteDom()
+  commitEffect(wipRoot)
+  currentRoot = wipRoot
+  wipRoot = null
+  deleteList = []
+}
+
+function commitEffect(fiber) {
+  if (!fiber) {
+    return
+  }
+
+  fiber.effectHook?.callback()
+
+  commitEffect(fiber.child)
+  commitEffect(fiber.sibling)
+}
+```
+
+这样初始化调用就完成了
+
+然后我们再来实现根据 deps 来调用
+
+这里要分成两种情况来处理：
+
+一种是初始化，全部都需要调用，不管有没有 deps
+
+另一种就是更新，只用 deps 改变的才需要调用
+
+我们可以利用 alternate 来区分这两种情况
+
+```js
+if (!fiber.alternate) {
+  // init
+  fiber.effectHook?.callback()
+} else {
+  // update
+}
+```
+
+先测试一下，看看有没有破坏老功能，查看页面输出是没有问题的
+
+然后就需要根据 deps 是否改变来调用 callback
+
+```js
+if (fiber.effectHook) {
+  const needUpdate = fiber.effectHook.deps.some(
+    (dep, index) => dep !== fiber.alternate.effectHook.deps[index]
+  )
+  if (needUpdate) {
+    fiber.effectHook.callback()
+  }
+}
+```
+
+测试一下：
+
+```js
+React.useEffect(() => {
+  console.log('useEffect', count)
+}, [count])
 ```
 
 没有问题
 
-但点击第三下的时候，bar 依然是 bar11，就不用执行更新逻辑了，所以我们需要判断是否需要执行更新逻辑
-
-我们在 push 前判断一下
+再测试一下依赖项不变是否可以：
 
 ```js
-const eagerState = typeof action === 'function' ? action(stateHook.state) : action
-if (eagerState === stateHook.state) {
-  return
-}
-stateHook.queue.push(typeof action === 'function' ? action : () => action)
+React.useEffect(() => {
+  console.log('useEffect', 1)
+}, [1])
 ```
 
-这样就完成了
+也没有问题
+
+然后再来看看有多个 useEffect 的情况，那这种就需要使用数组来存储了
+
+与 useState 相似
+
+```js
+let effects = []
+const useEffect = (callback, deps) => {
+  const currentRoot = currentFc
+
+  effects.push({
+    callback,
+    deps
+  })
+
+  currentRoot.effectHooks = effects
+}
+```
+
+```js
+function updateFunctionComponent(fiber) {
+  states = []
+  stateIndex = 0
+  effects = []
+}
+```
+
+```js
+function commitEffect(fiber) {
+  if (!fiber) {
+    return
+  }
+
+  if (!fiber.alternate) {
+    // init
+    fiber.effectHooks?.forEach(effect => {
+      effect.callback()
+    })
+  } else {
+    // update
+    fiber.effectHooks?.forEach((effect, i) => {
+      const needUpdate = effect.deps.some(
+        (dep, index) => dep !== fiber.alternate.effectHooks[i].deps[index]
+      )
+      if (needUpdate) {
+        effect.callback()
+      }
+    })
+  }
+
+  commitEffect(fiber.child)
+  commitEffect(fiber.sibling)
+}
+```
+
+测试一下：
+
+```js
+React.useEffect(() => {
+  console.log('useEffect', 'init')
+}, [])
+
+React.useEffect(() => {
+  console.log('useEffect', 1)
+}, [1])
+
+React.useEffect(() => {
+  console.log('useEffect', count)
+}, [count])
+```
+
+功能没有问题
+
+update 时我们还可以去优化一下，如果没有 deps，那就不需要执行 callback 了
+
+```js
+fiber.effectHooks?.forEach((effect, i) => {
+  if (!effect.deps.length) {
+    return
+  }
+  const needUpdate = effect.deps.some(
+    (dep, index) => dep !== fiber.alternate.effectHooks[i].deps[index]
+  )
+  if (needUpdate) {
+    effect.callback()
+  }
+})
+```

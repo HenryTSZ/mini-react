@@ -45,6 +45,18 @@ function App() {
     })
   }
 
+  React.useEffect(() => {
+    console.log('useEffect', 'init')
+  }, [])
+
+  React.useEffect(() => {
+    console.log('useEffect', 1)
+  }, [1])
+
+  React.useEffect(() => {
+    console.log('useEffect', count)
+  }, [count])
+
   return (
     <div {...attribute}>
       hi-mini-react
